@@ -1,13 +1,14 @@
-// app/page.jsx - メインアプリ（完全版・デジタル名刺機能付き）
+// app/page.jsx - メインアプリ（ローディング問題修正版）
 'use client'
 
 import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
-import { Heart, Star, Sparkles, Mail, Loader2, User, Edit, LogOut, Camera, Image as ImageIcon, CreditCard } from 'lucide-react'
+import { Heart, Star, Sparkles, Mail, Loader2, User, Edit, LogOut, Camera, Image as ImageIcon, CreditCard, Eye } from 'lucide-react'
 import Profile from '../components/Profile'
 import ImageGallery from '../components/ImageGallery'
 import ImageManager from '../components/ImageManager'
 import DigitalCard from '../components/DigitalCard'
+import UserPreview from '../components/UserPreview'
 
 // Supabaseクライアントの初期化
 const supabase = createBrowserClient(
@@ -165,7 +166,8 @@ function Auth() {
 function Dashboard({ session }) {
   const [currentView, setCurrentView] = useState('profile') // 'profile', 'gallery', 'manage', 'card'
   const [profile, setProfile] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [profileLoading, setProfileLoading] = useState(false) // 名前変更: loadingからprofileLoadingに
+  const [showPreview, setShowPreview] = useState(false) // プレビューモーダルの表示状態
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -175,7 +177,7 @@ function Dashboard({ session }) {
 
   const getProfile = async () => {
     try {
-      setLoading(true)
+      setProfileLoading(true) // profileLoadingを使用
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -205,7 +207,7 @@ function Dashboard({ session }) {
     } catch (error) {
       console.error('プロフィール取得エラー:', error)
     } finally {
-      setLoading(false)
+      setProfileLoading(false) // profileLoadingを使用
     }
   }
 
@@ -225,8 +227,16 @@ function Dashboard({ session }) {
     setProfile(updatedProfile)
   }
 
-  if (loading) {
-    return <LoadingSpinner />
+  // プロフィール読み込み中のローディング表示は最小限に
+  if (profileLoading && !profile) { // プロフィールが全くない場合のみローディング表示
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-pink-300 border-t-pink-500 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 text-sm">プロフィールを読み込み中...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -306,6 +316,17 @@ function Dashboard({ session }) {
                   <span>画像管理</span>
                 </button>
               </nav>
+
+              {/* プレビューボタン */}
+              <button
+                onClick={() => setShowPreview(true)}
+                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
+                title="他ユーザーから見たプレビュー"
+              >
+                <Eye size={16} />
+                <span>プレビュー</span>
+              </button>
+
               <button
                 onClick={handleSignOut}
                 className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
@@ -348,6 +369,14 @@ function Dashboard({ session }) {
           />
         )}
       </div>
+
+      {/* プレビューモーダル */}
+      {showPreview && (
+        <UserPreview 
+          userId={session.user.id}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
     </div>
   )
 }
@@ -355,21 +384,25 @@ function Dashboard({ session }) {
 // メインコンポーネント
 export default function Home() {
   const [session, setSession] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [authLoading, setAuthLoading] = useState(true) // 認証のローディングのみ
 
   useEffect(() => {
+    let mounted = true // マウント状態の追跡
+
     const getSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession()
         if (error) {
           console.error('セッション取得エラー:', error)
-        } else {
+        } else if (mounted) {
           setSession(session)
         }
       } catch (error) {
         console.error('予期しないエラー:', error)
       } finally {
-        setLoading(false)
+        if (mounted) {
+          setAuthLoading(false)
+        }
       }
     }
 
@@ -379,16 +412,20 @@ export default function Home() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('認証状態変更:', event, session?.user?.email)
-      setSession(session)
-      setLoading(false)
+      if (mounted) {
+        setSession(session)
+        setAuthLoading(false)
+      }
     })
 
     return () => {
+      mounted = false // クリーンアップ時にマウント状態を更新
       subscription.unsubscribe()
     }
   }, [])
 
-  if (loading) {
+  // 認証のローディングのみ表示
+  if (authLoading) {
     return <LoadingSpinner />
   }
 
