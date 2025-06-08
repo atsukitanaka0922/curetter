@@ -1,4 +1,4 @@
-// app/api/auth/[...nextauth]/route.js - 修正版（エクスポート対応）
+// app/api/auth/[...nextauth]/route.js - 修正版（Spotify認証問題対応）
 import NextAuth from 'next-auth'
 import SpotifyProvider from 'next-auth/providers/spotify'
 
@@ -13,6 +13,7 @@ export const authOptions = {
             'user-read-email',
             'user-read-private',
             'playlist-read-private',
+            'playlist-read-collaborative',
             'playlist-modify-public', 
             'playlist-modify-private',
             'user-library-read',
@@ -24,7 +25,13 @@ export const authOptions = {
   ],
   callbacks: {
     async jwt({ token, account, user }) {
-      console.log('JWT Callback - Account:', !!account, account?.provider)
+      console.log('🔑 JWT Callback:', {
+        hasAccount: !!account,
+        provider: account?.provider,
+        tokenType: account?.token_type,
+        expiresAt: account?.expires_at,
+        hasRefreshToken: !!account?.refresh_token
+      })
       
       // 初回ログイン時にアクセストークンを保存
       if (account && account.provider === 'spotify') {
@@ -39,8 +46,8 @@ export const authOptions = {
           token.spotifyUserId = user.id
         }
         
-        console.log('Token expires at:', new Date(token.accessTokenExpires))
-        console.log('User ID:', token.spotifyUserId)
+        console.log('📅 Token expires at:', new Date(token.accessTokenExpires))
+        console.log('👤 User ID:', token.spotifyUserId)
       }
 
       // アクセストークンの期限チェック
@@ -66,10 +73,11 @@ export const authOptions = {
       session.provider = token.provider
       session.spotifyUserId = token.spotifyUserId
       
-      console.log('Session created:', {
+      console.log('📋 Session created:', {
         hasToken: !!session.accessToken,
         userId: session.spotifyUserId,
-        error: session.error
+        error: session.error,
+        provider: session.provider
       })
       
       return session
@@ -81,11 +89,17 @@ export const authOptions = {
   debug: process.env.NODE_ENV === 'development',
   session: {
     strategy: 'jwt'
+  },
+  // 重要: セッションの有効期限を延長
+  jwt: {
+    maxAge: 60 * 60 * 24 * 30, // 30日
   }
 }
 
 async function refreshAccessToken(token) {
   try {
+    console.log('🔄 Attempting token refresh...')
+    
     const url = 'https://accounts.spotify.com/api/token'
     
     const response = await fetch(url, {
@@ -103,7 +117,11 @@ async function refreshAccessToken(token) {
     const refreshedTokens = await response.json()
 
     if (!response.ok) {
-      console.error('❌ Token refresh failed:', refreshedTokens)
+      console.error('❌ Token refresh failed:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: refreshedTokens
+      })
       throw refreshedTokens
     }
 

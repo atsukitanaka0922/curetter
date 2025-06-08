@@ -1,4 +1,4 @@
-// app/api/spotify/export/route.js - デバッグ強化版
+// app/api/spotify/export/route.js - 修正版（Bad request対応）
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '../../auth/[...nextauth]/route'
@@ -9,12 +9,13 @@ export async function POST(request) {
     
     // NextAuthセッション確認
     const session = await getServerSession(authOptions)
-    console.log('Session check:', {
+    console.log('🔍 Session check:', {
       exists: !!session,
       hasAccessToken: !!session?.accessToken,
       hasSpotifyUserId: !!session?.spotifyUserId,
       provider: session?.provider,
-      error: session?.error
+      error: session?.error,
+      userEmail: session?.user?.email
     })
     
     if (!session) {
@@ -169,7 +170,8 @@ async function getSpotifyUser(accessToken) {
     console.log('✅ User info retrieved:', {
       id: user.id,
       display_name: user.display_name,
-      product: user.product
+      product: user.product,
+      country: user.country
     })
     return { success: true, user }
 
@@ -179,12 +181,12 @@ async function getSpotifyUser(accessToken) {
   }
 }
 
-// Spotifyプレイリストを作成
+// Spotifyプレイリストを作成（Bad request対応版）
 async function createSpotifyPlaylist(accessToken, userId, localPlaylist, makePublic) {
   try {
     console.log('🎵 Creating playlist for user:', userId)
     
-    // プレイリスト名の検証
+    // プレイリスト名の検証と修正
     if (!localPlaylist.name || localPlaylist.name.trim() === '') {
       return { 
         success: false, 
@@ -193,33 +195,60 @@ async function createSpotifyPlaylist(accessToken, userId, localPlaylist, makePub
       }
     }
 
-    // 説明文の作成
-    const description = [
-      localPlaylist.description || '',
+    // 特殊文字とサイズ制限対応
+    const sanitizedName = localPlaylist.name
+      .trim()
+      .replace(/[<>:"/\\|?*]/g, '') // 無効な文字を除去
+      .substring(0, 100) // Spotifyの制限: 100文字
+    
+    if (sanitizedName === '') {
+      return { 
+        success: false, 
+        error: 'プレイリスト名に有効な文字が含まれていません',
+        debug: 'No valid characters in playlist name after sanitization'
+      }
+    }
+
+    // 説明文の作成と修正
+    const baseDescription = localPlaylist.description || ''
+    const exportInfo = [
+      baseDescription.trim(),
       '',
       '--- プリキュアプロフィールメーカーからエクスポート ---',
       `元プレイリスト: ${localPlaylist.name}`,
-      `エクスポート日時: ${new Date().toLocaleString('ja-JP')}`
-    ].filter(line => line.trim()).join('\n')
+      `エクスポート日時: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`
+    ].filter(line => line !== '').join('\n')
 
+    const sanitizedDescription = exportInfo
+      .replace(/[<>]/g, '') // HTMLタグ類似文字を除去
+      .substring(0, 300) // Spotifyの制限: 300文字
+
+    // リクエストデータの作成
     const playlistData = {
-      name: localPlaylist.name.trim().substring(0, 100), // Spotifyの制限: 100文字
-      description: description.substring(0, 300), // Spotifyの制限: 300文字
+      name: sanitizedName,
+      description: sanitizedDescription,
       public: Boolean(makePublic),
       collaborative: false
     }
 
-    console.log('📋 Playlist data:', {
+    console.log('📋 Playlist data (sanitized):', {
       name: playlistData.name,
+      nameLength: playlistData.name.length,
       public: playlistData.public,
-      descriptionLength: playlistData.description.length
+      descriptionLength: playlistData.description.length,
+      originalName: localPlaylist.name
     })
 
-    const response = await fetch(`https://api.spotify.com/v1/users/${encodeURIComponent(userId)}/playlists`, {
+    // Spotify API呼び出し（修正版）
+    const apiUrl = `https://api.spotify.com/v1/users/${encodeURIComponent(userId)}/playlists`
+    console.log('📡 API URL:', apiUrl)
+
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
       body: JSON.stringify(playlistData)
     })
@@ -227,42 +256,69 @@ async function createSpotifyPlaylist(accessToken, userId, localPlaylist, makePub
     console.log('📡 Playlist creation response:', {
       status: response.status,
       statusText: response.statusText,
-      headers: Object.fromEntries(response.headers.entries())
+      contentType: response.headers.get('content-type')
     })
 
+    // レスポンスの処理
+    const responseText = await response.text()
+    let responseData
+    
+    try {
+      responseData = JSON.parse(responseText)
+    } catch (parseError) {
+      console.error('❌ Failed to parse response as JSON:', responseText.substring(0, 500))
+      return {
+        success: false,
+        error: 'Spotify APIからの無効なレスポンス',
+        debug: `Response not JSON: ${responseText.substring(0, 200)}`
+      }
+    }
+
     if (!response.ok) {
-      const error = await response.json()
       console.error('❌ Playlist creation failed:', {
         status: response.status,
-        error: error,
+        error: responseData,
         userId: userId,
         playlistData: playlistData
       })
       
       let errorMessage = 'プレイリスト作成に失敗しました'
+      
       if (response.status === 400) {
-        errorMessage = `プレイリスト作成失敗: ${error.error?.message || 'リクエストが無効です'}`
+        // Bad Requestの詳細分析
+        if (responseData.error?.message) {
+          if (responseData.error.message.includes('Invalid user ID')) {
+            errorMessage = `無効なユーザーID: ${userId}`
+          } else if (responseData.error.message.includes('name')) {
+            errorMessage = `プレイリスト名が無効: "${sanitizedName}"`
+          } else {
+            errorMessage = `プレイリスト作成失敗: ${responseData.error.message}`
+          }
+        } else {
+          errorMessage = 'プレイリスト作成リクエストが無効です'
+        }
       } else if (response.status === 401) {
         errorMessage = 'Spotify認証の権限が不足しています。再度認証してください。'
       } else if (response.status === 403) {
         errorMessage = 'プレイリスト作成の権限がありません。Spotifyの設定を確認してください。'
+      } else if (response.status === 429) {
+        errorMessage = 'APIリクエスト制限に達しました。しばらく待ってから再試行してください。'
       }
       
       return { 
         success: false, 
         error: errorMessage,
-        debug: `Status: ${response.status}, Error: ${JSON.stringify(error)}`
+        debug: `Status: ${response.status}, Error: ${JSON.stringify(responseData)}, UserID: ${userId}`
       }
     }
 
-    const playlist = await response.json()
     console.log('✅ Spotify playlist created successfully:', {
-      id: playlist.id,
-      name: playlist.name,
-      external_urls: playlist.external_urls
+      id: responseData.id,
+      name: responseData.name,
+      external_urls: responseData.external_urls
     })
     
-    return { success: true, playlist }
+    return { success: true, playlist: responseData }
 
   } catch (error) {
     console.error('❌ Playlist creation error:', error)
@@ -288,7 +344,7 @@ async function addTracksToSpotifyPlaylist(accessToken, playlistId, tracks) {
     for (let i = 0; i < tracks.length; i += batchSize) {
       const batch = tracks.slice(i, i + batchSize)
       const trackUris = batch
-        .filter(track => track.id) // IDが存在する楽曲のみ
+        .filter(track => track.id && typeof track.id === 'string') // IDの検証強化
         .map(track => `spotify:track:${track.id}`)
       
       console.log(`📦 Processing batch ${Math.floor(i / batchSize) + 1}:`, {
@@ -306,7 +362,8 @@ async function addTracksToSpotifyPlaylist(accessToken, playlistId, tracks) {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         body: JSON.stringify({
           uris: trackUris
@@ -318,7 +375,8 @@ async function addTracksToSpotifyPlaylist(accessToken, playlistId, tracks) {
         console.error('❌ Failed to add batch:', {
           status: response.status,
           error: error,
-          batchNumber: Math.floor(i / batchSize) + 1
+          batchNumber: Math.floor(i / batchSize) + 1,
+          trackUris: trackUris.slice(0, 5) // デバッグ用に最初の5個だけ
         })
         skippedCount += batch.length
         continue
