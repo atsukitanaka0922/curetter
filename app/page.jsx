@@ -1,15 +1,16 @@
-// app/page.jsx - メインアプリ（ローカルプレイリスト対応版）
+// app/page.jsx - EnhancedAuth対応版（完全なパスワードログイン対応）
 'use client'
 
 import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
-import { Heart, Star, Sparkles, Mail, Loader2, User, Edit, LogOut, Camera, Image as ImageIcon, CreditCard, Eye, Music } from 'lucide-react'
+import { Heart, Star, Sparkles, User, LogOut, Camera, Image as ImageIcon, CreditCard, Eye, Music } from 'lucide-react'
 import Profile from '../components/Profile'
 import ImageGallery from '../components/ImageGallery'
 import ImageManager from '../components/ImageManager'
 import DigitalCard from '../components/DigitalCard'
 import UserPreview from '../components/UserPreview'
-import LocalPlaylist from '../components/LocalPlaylist' // 変更: Playlist → LocalPlaylist
+import LocalPlaylist from '../components/LocalPlaylist'
+import EnhancedAuth from '../components/EnhancedAuth' // 完全版認証コンポーネント
 
 // Supabaseクライアントの初期化
 const supabase = createBrowserClient(
@@ -20,7 +21,7 @@ const supabase = createBrowserClient(
 // ローディングスピナーコンポーネント
 function LoadingSpinner() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
       <div className="text-center">
         <div className="relative">
           <div className="w-16 h-16 border-4 border-pink-200 border-t-pink-500 rounded-full animate-spin"></div>
@@ -28,135 +29,12 @@ function LoadingSpinner() {
           <div className="absolute -bottom-2 -left-2 w-4 h-4 bg-blue-400 rounded-full animate-pulse"></div>
         </div>
         <p className="mt-4 text-gray-600 animate-pulse">
-          プリキュアの魔法を準備中...
+          プリキュアの魔法を準備中...✨
         </p>
-      </div>
-    </div>
-  )
-}
-
-// 認証コンポーネント
-function Auth() {
-  const [loading, setLoading] = useState(false)
-  const [email, setEmail] = useState('')
-  const [message, setMessage] = useState('')
-  const [messageType, setMessageType] = useState('')
-
-  const handleLogin = async (e) => {
-    e.preventDefault()
-    
-    if (!email) {
-      setMessage('メールアドレスを入力してください')
-      setMessageType('error')
-      return
-    }
-
-    try {
-      setLoading(true)
-      setMessage('')
-      
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-        },
-      })
-
-      if (error) {
-        throw error
-      }
-
-      setMessage('メールをチェックしてマジカルリンクをクリックしてください！✨')
-      setMessageType('success')
-      setEmail('')
-    } catch (error) {
-      console.error('ログインエラー:', error)
-      setMessage(error.message || 'エラーが発生しました。もう一度お試しください。')
-      setMessageType('error')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-8">
-      <div className="w-full max-w-md">
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-white/20">
-          <div className="text-center mb-8">
-            <div className="flex justify-center items-center space-x-2 mb-4">
-              <Heart className="text-pink-500" size={32} />
-              <Sparkles className="text-purple-500" size={28} />
-              <Star className="text-blue-500" size={30} />
-            </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-pink-600 via-purple-600 to-blue-600 bg-clip-text text-transparent mb-2">
-              プリキュアファン
-            </h1>
-            <h2 className="text-2xl font-bold bg-gradient-to-r from-pink-600 via-purple-600 to-blue-600 bg-clip-text text-transparent mb-4">
-              プロフィール
-            </h2>
-            <p className="text-gray-600 text-sm">
-              あなたのプリキュア愛を共有しましょう！
-            </p>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                メールアドレス
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  id="email"
-                  type="email"
-                  placeholder="your-email@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200 bg-white/50"
-                  disabled={loading}
-                  required
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white py-3 px-6 rounded-xl hover:from-pink-600 hover:via-purple-600 hover:to-blue-600 transition-all duration-200 font-medium shadow-lg hover:shadow-xl transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-            >
-              {loading ? (
-                <div className="flex items-center justify-center space-x-2">
-                  <Loader2 className="animate-spin" size={20} />
-                  <span>マジカルログイン中...</span>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center space-x-2">
-                  <Sparkles size={20} />
-                  <span>マジカルログイン</span>
-                </div>
-              )}
-            </button>
-          </form>
-
-          {message && (
-            <div className={`mt-6 p-4 rounded-xl text-sm ${
-              messageType === 'success' 
-                ? 'bg-green-50 text-green-700 border border-green-200' 
-                : 'bg-red-50 text-red-700 border border-red-200'
-            }`}>
-              {message}
-            </div>
-          )}
-
-          <div className="mt-8 text-center">
-            <p className="text-xs text-gray-500">
-              パスワード不要！メールアドレスに送られるリンクからログインできます
-            </p>
-          </div>
-        </div>
-
-        <div className="text-center mt-6 text-sm text-gray-500">
-          <p>✨ みんなで一緒にプリキュア愛を共有しよう！ ✨</p>
+        <div className="mt-2 flex justify-center space-x-2">
+          <Heart size={16} className="text-pink-400 animate-bounce" />
+          <Sparkles size={16} className="text-purple-400 animate-bounce" style={{ animationDelay: '0.1s' }} />
+          <Star size={16} className="text-blue-400 animate-bounce" style={{ animationDelay: '0.2s' }} />
         </div>
       </div>
     </div>
@@ -179,6 +57,9 @@ function Dashboard({ session }) {
   const getProfile = async () => {
     try {
       setProfileLoading(true)
+      
+      console.log('📂 Loading profile for user:', session.user.id)
+      
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -186,10 +67,14 @@ function Dashboard({ session }) {
         .single()
 
       if (error && error.code !== 'PGRST116') {
+        console.error('❌ Profile fetch error:', error)
         throw error
       }
 
       if (data) {
+        console.log('✅ Profile loaded:', data.display_name || 'No name')
+        
+        // 配列データの処理
         const processedData = {
           ...data,
           favorite_character: Array.isArray(data.favorite_character) ? data.favorite_character : 
@@ -204,30 +89,56 @@ function Dashboard({ session }) {
                          data.watched_series ? data.watched_series.split(',').map(s => s.trim()) : []
         }
         setProfile(processedData)
+      } else {
+        console.log('ℹ️ No profile found, will create on first edit')
+        setProfile(null)
       }
     } catch (error) {
-      console.error('プロフィール取得エラー:', error)
+      console.error('❌ Profile loading error:', error)
+      // エラーが発生してもアプリは続行
     } finally {
       setProfileLoading(false)
     }
   }
 
   const handleSignOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) {
-      console.error('ログアウトエラー:', error)
-      alert('ログアウトに失敗しました')
+    if (!confirm('ログアウトしますか？')) {
+      return
+    }
+    
+    try {
+      console.log('👋 Signing out user:', session.user.email)
+      
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error('❌ Signout error:', error)
+        throw error
+      }
+      
+      console.log('✅ Signout successful')
+      
+      // 状態をクリア
+      setProfile(null)
+      setCurrentView('profile')
+      setShowPreview(false)
+      
+    } catch (error) {
+      console.error('❌ Signout failed:', error)
+      alert('ログアウトに失敗しました: ' + error.message)
     }
   }
 
   const handleAvatarChange = (newAvatarUrl) => {
+    console.log('📸 Avatar changed:', newAvatarUrl)
     setProfile(prev => ({ ...prev, avatar_url: newAvatarUrl }))
   }
 
   const handleProfileUpdate = (updatedProfile) => {
+    console.log('👤 Profile updated:', updatedProfile.display_name)
     setProfile(updatedProfile)
   }
 
+  // プロフィール読み込み中の表示
   if (profileLoading && !profile) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50 flex items-center justify-center">
@@ -252,18 +163,21 @@ function Dashboard({ session }) {
                   <img
                     src={profile.avatar_url}
                     alt="プロフィール画像"
-                    className="w-10 h-10 rounded-full object-cover border-2 border-pink-300"
+                    className="w-10 h-10 rounded-full object-cover border-2 border-pink-300 shadow-sm"
+                    onError={(e) => {
+                      console.log('Avatar load error, falling back to default')
+                      e.target.style.display = 'none'
+                      e.target.nextElementSibling.style.display = 'flex'
+                    }}
                   />
-                ) : (
-                  <div className="w-10 h-10 bg-gradient-to-br from-pink-300 via-purple-300 to-blue-300 rounded-full flex items-center justify-center">
-                    <User size={20} className="text-white" />
-                  </div>
-                )}
+                ) : null}
+                <div className={`w-10 h-10 bg-gradient-to-br from-pink-300 via-purple-300 to-blue-300 rounded-full flex items-center justify-center ${profile?.avatar_url ? 'hidden' : 'flex'}`}>
+                  <User size={20} className="text-white" />
+                </div>
                 <div>
                   <h1 className="text-lg font-bold text-gray-800">
                     {profile?.display_name || 'プリキュアファン'}
                   </h1>
-                  <p className="text-xs text-gray-600">{session.user.email}</p>
                 </div>
               </div>
             </div>
@@ -273,78 +187,81 @@ function Dashboard({ session }) {
               <nav className="flex space-x-1">
                 <button
                   onClick={() => setCurrentView('profile')}
-                  className={`px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
+                  className={`px-3 py-1.5 rounded-lg transition-colors flex items-center space-x-1.5 text-xs font-medium ${
                     currentView === 'profile'
-                      ? 'bg-pink-500 text-white'
-                      : 'text-gray-600 hover:bg-pink-50'
+                      ? 'bg-pink-500 text-white shadow-md'
+                      : 'text-gray-600 hover:bg-pink-50 hover:text-pink-600'
                   }`}
                 >
-                  <User size={16} />
+                  <User size={14} />
                   <span>プロフィール</span>
                 </button>
                 <button
                   onClick={() => setCurrentView('gallery')}
-                  className={`px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
+                  className={`px-3 py-1.5 rounded-lg transition-colors flex items-center space-x-1.5 text-xs font-medium ${
                     currentView === 'gallery'
-                      ? 'bg-purple-500 text-white'
-                      : 'text-gray-600 hover:bg-purple-50'
+                      ? 'bg-purple-500 text-white shadow-md'
+                      : 'text-gray-600 hover:bg-purple-50 hover:text-purple-600'
                   }`}
                 >
-                  <ImageIcon size={16} />
+                  <ImageIcon size={14} />
                   <span>ギャラリー</span>
                 </button>
                 <button
                   onClick={() => setCurrentView('card')}
-                  className={`px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
+                  className={`px-3 py-1.5 rounded-lg transition-colors flex items-center space-x-1.5 text-xs font-medium ${
                     currentView === 'card'
-                      ? 'bg-green-500 text-white'
-                      : 'text-gray-600 hover:bg-green-50'
+                      ? 'bg-green-500 text-white shadow-md'
+                      : 'text-gray-600 hover:bg-green-50 hover:text-green-600'
                   }`}
                 >
-                  <CreditCard size={16} />
+                  <CreditCard size={14} />
                   <span>デジタル名刺</span>
                 </button>
                 <button
                   onClick={() => setCurrentView('playlist')}
-                  className={`px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
+                  className={`px-3 py-1.5 rounded-lg transition-colors flex items-center space-x-1.5 text-xs font-medium ${
                     currentView === 'playlist'
-                      ? 'bg-indigo-500 text-white'
-                      : 'text-gray-600 hover:bg-indigo-50'
+                      ? 'bg-indigo-500 text-white shadow-md'
+                      : 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-600'
                   }`}
                 >
-                  <Music size={16} />
+                  <Music size={14} />
                   <span>プレイリスト</span>
                 </button>
                 <button
                   onClick={() => setCurrentView('manage')}
-                  className={`px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
+                  className={`px-3 py-1.5 rounded-lg transition-colors flex items-center space-x-1.5 text-xs font-medium ${
                     currentView === 'manage'
-                      ? 'bg-blue-500 text-white'
-                      : 'text-gray-600 hover:bg-blue-50'
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : 'text-gray-600 hover:bg-blue-50 hover:text-blue-600'
                   }`}
                 >
-                  <Camera size={16} />
+                  <Camera size={14} />
                   <span>画像管理</span>
                 </button>
               </nav>
 
-              {/* プレビューボタン */}
-              <button
-                onClick={() => setShowPreview(true)}
-                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
-                title="他ユーザーから見たプレビュー"
-              >
-                <Eye size={16} />
-                <span>プレビュー</span>
-              </button>
+              {/* アクションボタン */}
+              <div className="flex items-center space-x-2 ml-2 pl-2 border-l border-gray-200">
+                <button
+                  onClick={() => setShowPreview(true)}
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1.5 rounded-lg transition-colors flex items-center space-x-1.5 text-xs font-medium shadow-sm"
+                  title="他ユーザーから見たプレビュー"
+                >
+                  <Eye size={14} />
+                  <span>プレビュー</span>
+                </button>
 
-              <button
-                onClick={handleSignOut}
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
-              >
-                <LogOut size={16} />
-                <span>ログアウト</span>
-              </button>
+                <button
+                  onClick={handleSignOut}
+                  className="bg-gray-500 hover:bg-gray-600 text-white px-2 py-1.5 rounded-lg transition-colors flex items-center space-x-1.5 text-xs font-medium shadow-sm"
+                  title="ログアウト"
+                >
+                  <LogOut size={14} />
+                  <span>ログアウト</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -408,14 +325,17 @@ export default function Home() {
 
     const getSession = async () => {
       try {
+        console.log('🔍 Checking session...')
+        
         const { data: { session }, error } = await supabase.auth.getSession()
         if (error) {
-          console.error('セッション取得エラー:', error)
+          console.error('❌ Session fetch error:', error)
         } else if (mounted) {
+          console.log('✅ Session check complete:', session?.user?.email || 'No session')
           setSession(session)
         }
       } catch (error) {
-        console.error('予期しないエラー:', error)
+        console.error('❌ Unexpected session error:', error)
       } finally {
         if (mounted) {
           setAuthLoading(false)
@@ -425,13 +345,25 @@ export default function Home() {
 
     getSession()
 
+    // 認証状態の変更を監視
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('認証状態変更:', event, session?.user?.email)
+      console.log('🔄 Auth state changed:', event, session?.user?.email || 'No session')
+      
       if (mounted) {
         setSession(session)
         setAuthLoading(false)
+        
+        // ログインイベントの場合は追加処理
+        if (event === 'SIGNED_IN' && session) {
+          console.log('🎉 User signed in successfully')
+        }
+        
+        // ログアウトイベントの場合
+        if (event === 'SIGNED_OUT') {
+          console.log('👋 User signed out')
+        }
       }
     })
 
@@ -441,6 +373,7 @@ export default function Home() {
     }
   }, [])
 
+  // ローディング中
   if (authLoading) {
     return <LoadingSpinner />
   }
@@ -448,7 +381,7 @@ export default function Home() {
   return (
     <main className="relative z-10">
       {!session ? (
-        <Auth />
+        <EnhancedAuth />
       ) : (
         <Dashboard session={session} />
       )}
