@@ -1,9 +1,10 @@
-// components/Profile.jsx - プロフィール表示・編集コンポーネント（完全版・エピソード3個制限）
+// components/Profile.jsx - ソーシャルリンク対応版 (Part 1: インポート文と初期設定)
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Heart, Star, Sparkles, User, Edit, Save, X } from 'lucide-react'
+import { Heart, Star, Sparkles, User, Edit, Save, X, ExternalLink, Plus, Trash2, Globe } from 'lucide-react'
 import { supabase } from '../app/page'
+import SocialLinkManager from './SocialLinkManager'
 
 export default function Profile({ session, profile, onProfileUpdate, onAvatarChange }) {
   const [editing, setEditing] = useState(false)
@@ -26,7 +27,8 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
     favorite_episode: [],
     hobbies: '',
     free_text: '',
-    avatar_url: ''
+    avatar_url: '',
+    social_links: [] // ソーシャルリンク追加
   })
 
   // ダイアログ管理
@@ -62,21 +64,32 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
       // エピソードデータの重複除去処理と3個制限
       const processEpisodeData = (episodes) => {
         const processedEpisodes = processArrayData(episodes)
-        // 重複を除去（話数付きの名前と元の名前の両方をチェック）
         const uniqueEpisodes = []
         const seenEpisodes = new Set()
         
         processedEpisodes.forEach(episode => {
-          // 話数を除いたエピソード名を取得
           const cleanEpisodeName = episode.replace(/^第\d+話　/, '')
           if (!seenEpisodes.has(cleanEpisodeName)) {
             seenEpisodes.add(cleanEpisodeName)
-            uniqueEpisodes.push(cleanEpisodeName) // 常に元の名前で保存
+            uniqueEpisodes.push(cleanEpisodeName)
           }
         })
         
-        // エピソードは3個まで制限
         return uniqueEpisodes.slice(0, 3)
+      }
+
+      // ソーシャルリンクの処理
+      const processSocialLinks = (links) => {
+        if (Array.isArray(links)) {
+          return links
+        } else if (typeof links === 'string' && links.trim()) {
+          try {
+            return JSON.parse(links)
+          } catch {
+            return []
+          }
+        }
+        return []
       }
 
       setFormData({
@@ -85,17 +98,19 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
         favorite_series: processArrayData(profile.favorite_series),
         favorite_movie: processArrayData(profile.favorite_movie),
         favorite_episode: processEpisodeData(profile.favorite_episode),
-        watched_series: processArrayData(profile.watched_series)
+        watched_series: processArrayData(profile.watched_series),
+        social_links: processSocialLinks(profile.social_links)
       })
     }
   }, [profile])
 
+  // データ取得関数群
   const getSeriesData = async () => {
     try {
       const { data, error } = await supabase
         .from('precure_series')
         .select('*')
-        .order('id', { ascending: true }) // ID順（制作順）にソート
+        .order('id', { ascending: true })
 
       if (error) throw error
       setSeriesData(data || [])
@@ -109,7 +124,7 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
       const { data, error } = await supabase
         .from('precure_characters')
         .select('*')
-        .order('id', { ascending: true }) // ID順にソート
+        .order('id', { ascending: true })
 
       if (error) throw error
       setCharactersData(data || [])
@@ -123,7 +138,7 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
       const { data, error } = await supabase
         .from('precure_movies')
         .select('*')
-        .order('id', { ascending: true }) // ID順にソート
+        .order('id', { ascending: true })
 
       if (error) throw error
       setMoviesData(data || [])
@@ -137,7 +152,7 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
       const { data, error } = await supabase
         .from('episode_types')
         .select('*')
-        .order('id', { ascending: true }) // ID順（放送順）にソート
+        .order('id', { ascending: true })
 
       if (error) throw error
       setEpisodeTypesData(data || [])
@@ -155,13 +170,11 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
 
       setLoading(true)
       
-      // エピソードデータの場合、話数を除いてエピソード名のみを保存（3個まで制限）
       const processEpisodeData = (episodes) => {
         if (!Array.isArray(episodes)) return episodes
         return episodes.map(episode => {
-          // 話数付きの形式から元のエピソード名を抽出
           return episode.replace(/^第\d+話　/, '')
-        }).slice(0, 3) // 3個まで制限
+        }).slice(0, 3)
       }
       
       const updates = {
@@ -172,6 +185,7 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
         favorite_movie: Array.isArray(formData.favorite_movie) ? formData.favorite_movie.join(', ') : formData.favorite_movie,
         favorite_episode: Array.isArray(formData.favorite_episode) ? processEpisodeData(formData.favorite_episode).join(', ') : formData.favorite_episode,
         watched_series: Array.isArray(formData.watched_series) ? formData.watched_series.join(', ') : formData.watched_series,
+        social_links: JSON.stringify(formData.social_links), // JSONとして保存
         updated_at: new Date().toISOString()
       }
 
@@ -186,8 +200,9 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
         favorite_character: formData.favorite_character,
         favorite_series: formData.favorite_series,
         favorite_movie: formData.favorite_movie,
-        favorite_episode: processEpisodeData(formData.favorite_episode), // 話数を除いたエピソード名で保存
-        watched_series: formData.watched_series
+        favorite_episode: processEpisodeData(formData.favorite_episode),
+        watched_series: formData.watched_series,
+        social_links: formData.social_links
       }
 
       onProfileUpdate(updatedProfile)
@@ -199,6 +214,14 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
     } finally {
       setLoading(false)
     }
+  }
+
+  // ソーシャルリンク更新ハンドラー
+  const handleSocialLinksUpdate = (newLinks) => {
+    setFormData(prev => ({
+      ...prev,
+      social_links: newLinks
+    }))
   }
 
   // データベースからキャラクターをカテゴリ別に整理
@@ -213,7 +236,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
     })
 
     const categories = {}
-    // キャラクターをID順にソート
     const sortedCharacters = [...charactersData].sort((a, b) => a.id - b.id)
     
     sortedCharacters.forEach(char => {
@@ -229,7 +251,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
     })
 
     Object.keys(categories).forEach(seriesName => {
-      // すでにID順でソートされているので、名前だけを抽出
       categories[seriesName] = categories[seriesName].map(char => char.name)
     })
 
@@ -296,7 +317,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
       return {}
     }
 
-    // エピソードをID順（放送順）にソート
     const sortedEpisodes = [...episodeTypesData].sort((a, b) => a.id - b.id)
 
     const categories = {}
@@ -305,12 +325,10 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
       if (!categories[category]) {
         categories[category] = []
       }
-      // 話数付きのエピソード名を作成
       const episodeWithNumber = `第${episode.episode_number}話　${episode.name}`
       categories[category].push(episodeWithNumber)
     })
 
-    // カテゴリ内のエピソード話数を計算して、カテゴリ名に追加
     const categoriesWithCount = {}
     Object.keys(categories).forEach(categoryName => {
       const episodeCount = categories[categoryName].length
@@ -341,7 +359,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
       watchedSeries: 'watched_series'
     }
     
-    // エピソードの場合は重複除去処理と3個制限を追加
     let processedValues = values
     if (type === 'episode') {
       const uniqueEpisodes = []
@@ -351,11 +368,10 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
         const cleanEpisodeName = episode.replace(/^第\d+話　/, '')
         if (!seenEpisodes.has(cleanEpisodeName)) {
           seenEpisodes.add(cleanEpisodeName)
-          uniqueEpisodes.push(cleanEpisodeName) // 元の名前で保存
+          uniqueEpisodes.push(cleanEpisodeName)
         }
       })
       
-      // 3個まで制限
       processedValues = uniqueEpisodes.slice(0, 3)
     }
     
@@ -370,15 +386,13 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
     const [tempSelectedValues, setTempSelectedValues] = useState([])
     const [openCategories, setOpenCategories] = useState({})
 
-    // エピソードの最大選択数を定義
     const getMaxSelectionCount = (type) => {
       if (type === "episode") return 3
-      return 999 // その他は制限なし
+      return 999
     }
 
     useEffect(() => {
       if (isOpen) {
-        // エピソードの場合、選択済み値を話数付きの形式に変換
         if (dataType === "episode") {
           const episodeWithNumbers = selectedValues.map(episodeName => {
             const episodeDetail = episodeTypesData.find(ep => ep.name === episodeName)
@@ -405,15 +419,12 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
         if (isChecked) {
           return prev.filter(item => item !== value)
         } else {
-          // 最大選択数チェック
           if (prev.length >= maxCount) {
             alert(`${dataType === "episode" ? "エピソード" : "項目"}は最大${maxCount}個まで選択できます`)
             return prev
           }
           
-          // エピソードの場合は重複チェックを強化
           if (dataType === "episode") {
-            // 話数を除いたエピソード名で重複チェック
             const cleanValue = value.replace(/^第\d+話　/, '')
             const hasDuplicate = prev.some(item => {
               const cleanItem = item.replace(/^第\d+話　/, '')
@@ -421,7 +432,7 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
             })
             
             if (hasDuplicate) {
-              return prev // 重複の場合は追加しない
+              return prev
             }
           }
           
@@ -455,7 +466,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
       } else if (dataType === "movie") {
         return moviesData.find(movie => movie.title === itemName)
       } else if (dataType === "episode") {
-        // エピソードの場合、話数付きの名前から元のエピソード名を抽出して検索
         const episodeName = itemName.replace(/^第\d+話　/, '')
         return episodeTypesData.find(ep => ep.name === episodeName)
       } else if (dataType === "series") {
@@ -485,7 +495,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
-          {/* ダイアログヘッダー */}
           <div className="bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white p-6 rounded-t-2xl">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">{title}</h2>
@@ -511,9 +520,7 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
             )}
           </div>
 
-          {/* ダイアログコンテンツ */}
           <div className="flex-1 overflow-hidden flex">
-            {/* カテゴリリスト */}
             <div className="w-1/3 border-r border-gray-200 overflow-y-auto">
               {Object.entries(categories).map(([categoryName, options]) => (
                 <div key={categoryName} className="border-b border-gray-100">
@@ -535,7 +542,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
               ))}
             </div>
 
-            {/* 選択項目 */}
             <div className="flex-1 overflow-y-auto p-4">
               {Object.entries(categories).map(([categoryName, options]) => 
                 openCategories[categoryName] && (
@@ -612,7 +618,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
             </div>
           </div>
 
-          {/* ダイアログフッター */}
           <div className="border-t border-gray-200 p-6 bg-gray-50 rounded-b-2xl">
             <div className="flex justify-between items-center">
               <div className="text-sm text-gray-600">
@@ -643,6 +648,8 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
       </div>
     )
   }
+  
+  // components/Profile.jsx - Part 4: プロフィール表示部分
 
   return (
     <div className="space-y-6">
@@ -683,10 +690,57 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
                     </div>
                   )}
                 </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800">
-                    {profile?.display_name || 'プリキュアファン'}
-                  </h2>
+                <div className="flex-1">
+                  <div className="flex items-center space-x-3 mb-2">
+                    <h2 className="text-2xl font-bold text-gray-800">
+                      {profile?.display_name || 'プリキュアファン'}
+                    </h2>
+                    
+                    {/* ソーシャルリンク表示 */}
+                    {profile?.social_links && Array.isArray(profile.social_links) && profile.social_links.length > 0 && (
+                      <div className="flex items-center space-x-2">
+                        {profile.social_links.map((link, index) => (
+                          <a
+                            key={index}
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
+                            title={link.platform}
+                          >
+                            {link.platform === 'X (Twitter)' && (
+                              <svg className="w-4 h-4 text-gray-700" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                              </svg>
+                            )}
+                            {link.platform === 'YouTube' && (
+                              <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                              </svg>
+                            )}
+                            {link.platform === 'pixiv' && (
+                              <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M4.935 0A4.924 4.924 0 0 0 0 4.935v14.13A4.924 4.924 0 0 0 4.935 24h14.13A4.924 4.924 0 0 0 24 19.065V4.935A4.924 4.924 0 0 0 19.065 0zM8.523 19.066c-1.35 0-2.447-1.098-2.447-2.447 0-1.35 1.098-2.447 2.447-2.447s2.447 1.098 2.447 2.447c0 1.35-1.098 2.447-2.447 2.447zm8.492-7.754c-1.26 0-2.283-1.023-2.283-2.283 0-1.26 1.023-2.283 2.283-2.283s2.283 1.023 2.283 2.283c0 1.26-1.023 2.283-2.283 2.283z"/>
+                              </svg>
+                            )}
+                            {link.platform === 'Instagram' && (
+                              <svg className="w-4 h-4 text-pink-500" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                              </svg>
+                            )}
+                            {link.platform === 'TikTok' && (
+                              <svg className="w-4 h-4 text-gray-700" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12.53.02C13.84 0 15.14.01 16.44 0c.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/>
+                              </svg>
+                            )}
+                            {!['X (Twitter)', 'YouTube', 'pixiv', 'Instagram', 'TikTok'].includes(link.platform) && (
+                              <ExternalLink className="w-4 h-4 text-gray-700" />
+                            )}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -843,7 +897,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
                       {Array.isArray(profile?.favorite_episode) && profile.favorite_episode.length > 0 ? (
                         <div className="space-y-1">
                           {profile.favorite_episode.map((episode, index) => {
-                            // エピソードの詳細情報を取得
                             const episodeDetails = episodeTypesData.find(ep => ep.name === episode)
                             const displayText = episodeDetails 
                               ? `【${episodeDetails.category}】第${episodeDetails.episode_number}話 ${episode}`
@@ -876,6 +929,9 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
               </div>
             </div>
           ) : (
+
+            // components/Profile.jsx - Part 5: プロフィール編集フォーム
+
             /* プロフィール編集モード */
             <div className="space-y-6">
               <div className="flex justify-between items-center">
@@ -901,6 +957,17 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="あなたの名前"
                     required
+                  />
+                </div>
+
+                {/* ソーシャルリンク */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    ソーシャルリンク
+                  </label>
+                  <SocialLinkManager
+                    links={formData.social_links}
+                    onLinksChange={handleSocialLinksUpdate}
                   />
                 </div>
 
@@ -986,7 +1053,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
                     )}
                   </label>
 
-                  {/* 全作視聴済みチェックボックス */}
                   <div className="mb-3">
                     <label className="flex items-center space-x-2 p-3 border border-gray-300 rounded-lg hover:bg-yellow-50 cursor-pointer transition-colors">
                       <input
@@ -1008,7 +1074,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
                     </label>
                   </div>
 
-                  {/* 個別シリーズ選択 */}
                   {!formData.all_series_watched && (
                     <>
                       <button
@@ -1037,7 +1102,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
                     </>
                   )}
 
-                  {/* 全作視聴済み時の表示 */}
                   {formData.all_series_watched && (
                     <div className="p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-lg text-center">
                       <div className="text-2xl mb-2">🎉</div>
@@ -1049,7 +1113,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
 
                 {/* 好きなキャラと好きな作品 */}
                 <div className="grid md:grid-cols-2 gap-6">
-                  {/* 好きなキャラ */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       好きなキャラ
@@ -1084,7 +1147,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
                     )}
                   </div>
 
-                  {/* 好きな作品 */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       好きな作品
@@ -1122,7 +1184,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
 
                 {/* 好きな映画と好きなエピソード */}
                 <div className="grid md:grid-cols-2 gap-6">
-                  {/* 好きな映画 */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       好きな映画
@@ -1157,7 +1218,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
                     )}
                   </div>
 
-                  {/* 好きなエピソード（3個制限） */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       好きなエピソード
@@ -1180,7 +1240,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
                     {formData.favorite_episode?.length > 0 && (
                       <div className="mt-2 space-y-1">
                         {formData.favorite_episode.map((value, index) => {
-                          // エピソードの詳細情報を取得
                           const episodeName = value.replace(/^第\d+話　/, '')
                           const episodeDetails = episodeTypesData.find(ep => ep.name === episodeName)
                           const displayText = episodeDetails 
