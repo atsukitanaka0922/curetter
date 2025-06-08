@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
 import { Music, Heart, Star, Play, Plus, X, Trash2, Search, RefreshCw, ExternalLink, User, AlertCircle, Edit, Save, Copy, Share, Upload, CheckCircle, Download } from 'lucide-react'
 import { supabase } from '../app/page'
+import UnifiedImportModal from './UnifiedImportModal'
 
 export default function LocalPlaylist({ session, profile }) {
   const { data: spotifySession, status } = useSession()
@@ -14,8 +15,7 @@ export default function LocalPlaylist({ session, profile }) {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showSearchModal, setShowSearchModal] = useState(false)
   const [showPlaylistModal, setShowPlaylistModal] = useState(false)
-  const [showImportModal, setShowImportModal] = useState(false)
-  const [showExportModal, setShowExportModal] = useState(false)
+  const [showUnifiedImportModal, setShowUnifiedImportModal] = useState(false) // 統合インポートモーダル
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [searchLoading, setSearchLoading] = useState(false)
@@ -34,24 +34,6 @@ export default function LocalPlaylist({ session, profile }) {
   // 編集モード
   const [editingPlaylist, setEditingPlaylist] = useState(null)
 
-  // インポート機能用の状態
-  const [importUrl, setImportUrl] = useState('')
-  const [importLoading, setImportLoading] = useState(false)
-  const [importResults, setImportResults] = useState(null)
-
-  // エクスポート機能用の状態
-  const [exportPlaylist, setExportPlaylist] = useState(null)
-  const [exportLoading, setExportLoading] = useState(false)
-  const [spotifyAuth, setSpotifyAuth] = useState(null)
-  const [exportMakePublic, setExportMakePublic] = useState(false)
-
-  // JSONエクスポート・インポート機能用の状態
-  const [showJsonExportModal, setShowJsonExportModal] = useState(false)
-  const [exportJsonPlaylist, setExportJsonPlaylist] = useState(null)
-  const [showJsonImportModal, setShowJsonImportModal] = useState(false)
-  const [importJsonData, setImportJsonData] = useState('')
-  const [importJsonResults, setImportJsonResults] = useState(null)
-
   const fileInputRef = useRef(null)
 
   // useEffect hooks
@@ -60,25 +42,6 @@ export default function LocalPlaylist({ session, profile }) {
       loadLocalPlaylists()
     }
   }, [session])
-
-  // Spotify認証状態の監視
-  useEffect(() => {
-    if (spotifySession) {
-      checkSpotifyAuth()
-    }
-  }, [spotifySession])
-
-  // Spotify認証状態を確認
-  const checkSpotifyAuth = async () => {
-    try {
-      const response = await fetch('/api/spotify/auth')
-      const data = await response.json()
-      setSpotifyAuth(data)
-    } catch (error) {
-      console.error('Spotify auth check error:', error)
-      setSpotifyAuth({ authenticated: false, error: '認証確認に失敗しました' })
-    }
-  }
 
   // ローカルプレイリスト一覧を取得
   const loadLocalPlaylists = async () => {
@@ -106,6 +69,50 @@ export default function LocalPlaylist({ session, profile }) {
       setLoading(false)
     }
   }
+
+  // 統合インポートからプレイリスト作成（新しい関数）
+  const createPlaylistFromUnifiedImport = async (playlistData) => {
+    try {
+      setLoading(true)
+      setError('')
+      
+      console.log('🎵 Creating playlist from unified import:', playlistData)
+      
+      const finalPlaylistData = {
+        user_id: session.user.id,
+        name: playlistData.name,
+        description: playlistData.description,
+        is_public: playlistData.is_public || false,
+        tracks: playlistData.tracks.map(track => ({
+          ...track,
+          added_at: new Date().toISOString()
+        })),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+      
+      const { data, error } = await supabase
+        .from('local_playlists')
+        .insert([finalPlaylistData])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      console.log('✅ Unified import playlist created:', data)
+      
+      // プレイリストリストに追加
+      setPlaylists(prev => [data, ...prev])
+      
+    } catch (error) {
+      console.error('❌ Create unified import playlist error:', error)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // components/LocalPlaylist.jsx - Part 2: 主要機能関数
 
   // Spotify Web API（認証不要）で楽曲検索
   const searchTracks = async (query) => {
@@ -308,8 +315,6 @@ export default function LocalPlaylist({ session, profile }) {
     }
   }
 
-  // components/LocalPlaylist.jsx - Part 2: JSON機能とその他の関数
-
   // JSONエクスポート機能
   const exportToJson = (playlist) => {
     try {
@@ -364,251 +369,7 @@ export default function LocalPlaylist({ session, profile }) {
     }
   }
 
-  // JSONインポート機能
-  const importFromJson = async (jsonString) => {
-    try {
-      const importData = JSON.parse(jsonString)
-      
-      // データ構造の検証
-      if (!importData.playlist || !importData.tracks || !Array.isArray(importData.tracks)) {
-        throw new Error('無効なプレイリストデータ形式です')
-      }
-
-      // プリキュア関連楽曲のフィルタリング
-      const filteredTracks = filterPrecureTracksForImport(importData.tracks)
-      
-      setImportJsonResults({
-        metadata: importData.metadata,
-        playlist: importData.playlist,
-        tracks: filteredTracks,
-        originalCount: importData.tracks.length,
-        filteredCount: filteredTracks.length
-      })
-      
-      if (filteredTracks.length === 0) {
-        alert('プリキュア関連楽曲が見つかりませんでした。')
-      }
-    } catch (error) {
-      console.error('JSON import error:', error)
-      alert('JSONインポートに失敗しました: ' + error.message)
-    }
-  }
-
-  // ファイルアップロード処理
-  const handleJsonFileUpload = (event) => {
-    const file = event.target.files[0]
-    if (!file) return
-
-    if (file.type !== 'application/json' && !file.name.endsWith('.json')) {
-      alert('JSONファイルを選択してください')
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        importFromJson(e.target.result)
-      } catch (error) {
-        alert('ファイルの読み込みに失敗しました: ' + error.message)
-      }
-    }
-    reader.readAsText(file)
-  }
-
-  // プリキュア関連楽曲フィルタリング（インポート用）
-  const filterPrecureTracksForImport = (tracks) => {
-    const precureKeywords = [
-      'プリキュア', 'precure', 'pretty cure',
-      'ふたりはプリキュア', 'スプラッシュスター', 'yes!プリキュア5',
-      'フレッシュプリキュア', 'ハートキャッチプリキュア', 'スイートプリキュア',
-      'スマイルプリキュア', 'ドキドキプリキュア', 'ハピネスチャージプリキュア',
-      'プリンセスプリキュア', '魔法つかいプリキュア', 'アラモード',
-      'hugっとプリキュア', 'スタートゥインクルプリキュア',
-      'ヒーリングっどプリキュア', 'トロピカルージュプリキュア',
-      'デリシャスパーティプリキュア', 'ひろがるスカイプリキュア',
-      'わんだふるぷりきゅあ', 'キュア', 'cure'
-    ]
-
-    return tracks.filter(track => {
-      const trackName = track.name.toLowerCase()
-      const artistNames = track.artists?.map(artist => artist.name.toLowerCase()).join(' ') || ''
-      const albumName = track.album?.name.toLowerCase() || ''
-      
-      return precureKeywords.some(keyword => 
-        trackName.includes(keyword.toLowerCase()) ||
-        artistNames.includes(keyword.toLowerCase()) ||
-        albumName.includes(keyword.toLowerCase())
-      )
-    })
-  }
-
-  // JSONから新しいプレイリストを作成
-  const createPlaylistFromJson = async (importData, newPlaylistName) => {
-    if (!importData || !importData.tracks || importData.tracks.length === 0) {
-      alert('インポートする楽曲がありません')
-      return
-    }
-
-    try {
-      setLoading(true)
-      setError('')
-      
-      const playlistData = {
-        user_id: session.user.id,
-        name: newPlaylistName || `${importData.playlist.name} (インポート)`,
-        description: [
-          importData.playlist.description || '',
-          '',
-          '--- JSONファイルからインポート ---',
-          `元プレイリスト: ${importData.playlist.name}`,
-          `作成者: ${importData.metadata?.exportedBy || '不明'}`,
-          `インポート日時: ${new Date().toLocaleString('ja-JP')}`
-        ].filter(line => line.trim()).join('\n'),
-        is_public: false,
-        tracks: importData.tracks.map(track => ({
-          ...track,
-          added_at: new Date().toISOString()
-        })),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-      
-      console.log('🎵 Creating playlist from JSON:', playlistData)
-      
-      const { data, error } = await supabase
-        .from('local_playlists')
-        .insert([playlistData])
-        .select()
-        .single()
-
-      if (error) throw error
-
-      console.log('✅ JSON imported playlist created:', data)
-      
-      setPlaylists(prev => [data, ...prev])
-      
-      setShowJsonImportModal(false)
-      setImportJsonData('')
-      setImportJsonResults(null)
-      
-      alert(`プレイリスト「${data.name}」を作成しました！\n${importData.tracks.length}曲のプリキュア楽曲をインポートしました。✨`)
-      
-    } catch (error) {
-      console.error('❌ Create playlist from JSON error:', error)
-      setError(error.message)
-      alert('プレイリストの作成に失敗しました: ' + error.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Spotifyプレイリストをインポート
-  const importSpotifyPlaylist = async () => {
-    if (!importUrl.trim()) {
-      alert('Spotify プレイリストURLを入力してください')
-      return
-    }
-
-    try {
-      setImportLoading(true)
-      setError('')
-      
-      console.log('📥 Importing Spotify playlist:', importUrl)
-      
-      const response = await fetch('/api/spotify/import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ spotifyUrl: importUrl })
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'インポートに失敗しました')
-      }
-
-      console.log('✅ Import successful:', data)
-      setImportResults(data)
-      
-      if (data.filteredCount === 0) {
-        alert('プリキュア関連楽曲が見つかりませんでした。\n別のプレイリストをお試しください。')
-      }
-      
-    } catch (error) {
-      console.error('❌ Import error:', error)
-      setError(error.message)
-      alert(`インポートに失敗しました: ${error.message}`)
-    } finally {
-      setImportLoading(false)
-    }
-  }
-
-  // Spotify認証を開始
-  const connectSpotify = () => {
-    console.log('🔐 Starting Spotify authentication...')
-    signIn('spotify')
-  }
-
-  // Spotify認証を解除
-  const disconnectSpotify = () => {
-    console.log('🔓 Disconnecting Spotify...')
-    signOut()
-    setSpotifyAuth(null)
-  }
-
-  // インポート結果から新しいプレイリストを作成
-  const createPlaylistFromImport = async (importData, newPlaylistName) => {
-    if (!importData || !importData.tracks || importData.tracks.length === 0) {
-      alert('インポートする楽曲がありません')
-      return
-    }
-
-    try {
-      setLoading(true)
-      setError('')
-      
-      const playlistData = {
-        user_id: session.user.id,
-        name: newPlaylistName || `${importData.playlist.name} (インポート)`,
-        description: `Spotifyプレイリスト「${importData.playlist.name}」からインポート\n\n${importData.playlist.description || ''}`.trim(),
-        is_public: false, // デフォルトは非公開
-        tracks: importData.tracks,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-      
-      console.log('🎵 Creating playlist from import:', playlistData)
-      
-      const { data, error } = await supabase
-        .from('local_playlists')
-        .insert([playlistData])
-        .select()
-        .single()
-
-      if (error) throw error
-
-      console.log('✅ Imported playlist created:', data)
-      
-      // プレイリストリストに追加
-      setPlaylists(prev => [data, ...prev])
-      
-      // モーダルを閉じる
-      setShowImportModal(false)
-      setImportUrl('')
-      setImportResults(null)
-      
-      alert(`プレイリスト「${data.name}」を作成しました！\n${importData.tracks.length}曲のプリキュア楽曲をインポートしました。✨`)
-      
-    } catch (error) {
-      console.error('❌ Create imported playlist error:', error)
-      setError(error.message)
-      alert('プレイリストの作成に失敗しました: ' + error.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // components/LocalPlaylist.jsx - Part 3: その他の機能関数
 
   // 楽曲をプレイリストから削除
   const removeTrackFromPlaylist = async (trackId) => {
@@ -771,7 +532,7 @@ export default function LocalPlaylist({ session, profile }) {
     return `${Math.floor(diffDays / 365)}年前`
   }
 
-  // components/LocalPlaylist.jsx - Part 3: JSXレンダリング部分
+  // components/LocalPlaylist.jsx - Part 4: JSXレンダリング部分
 
   return (
     <div className="space-y-6">
@@ -802,19 +563,14 @@ export default function LocalPlaylist({ session, profile }) {
                 <Plus size={16} />
                 <span>新規作成</span>
               </button>
+              
+              {/* 統合インポートボタン */}
               <button
-                onClick={() => setShowImportModal(true)}
-                className="bg-gradient-to-r from-green-500 to-teal-500 text-white px-4 py-2 rounded-lg hover:from-green-600 hover:to-teal-600 transition-colors flex items-center space-x-2"
-              >
-                <Music size={16} />
-                <span>Spotifyから取り込み</span>
-              </button>
-              <button
-                onClick={() => setShowJsonImportModal(true)}
-                className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-lg hover:from-purple-600 hover:to-pink-600 transition-colors flex items-center space-x-2"
+                onClick={() => setShowUnifiedImportModal(true)}
+                className="bg-gradient-to-r from-green-500 via-blue-500 to-purple-500 text-white px-4 py-2 rounded-lg hover:from-green-600 hover:via-blue-600 hover:to-purple-600 transition-colors flex items-center space-x-2"
               >
                 <Upload size={16} />
-                <span>JSONインポート</span>
+                <span>インポート</span>
               </button>
             </div>
           </div>
@@ -966,16 +722,10 @@ export default function LocalPlaylist({ session, profile }) {
                 プレイリストを作成
               </button>
               <button
-                onClick={() => setShowImportModal(true)}
-                className="bg-gradient-to-r from-green-500 to-teal-500 text-white px-6 py-3 rounded-xl hover:from-green-600 hover:to-teal-600 transition-colors"
+                onClick={() => setShowUnifiedImportModal(true)}
+                className="bg-gradient-to-r from-green-500 via-blue-500 to-purple-500 text-white px-6 py-3 rounded-xl hover:from-green-600 hover:via-blue-600 hover:to-purple-600 transition-colors"
               >
-                Spotifyから取り込み
-              </button>
-              <button
-                onClick={() => setShowJsonImportModal(true)}
-                className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-3 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-colors"
-              >
-                JSONインポート
+                プレイリストをインポート
               </button>
             </div>
           </div>
@@ -1051,232 +801,6 @@ export default function LocalPlaylist({ session, profile }) {
                   {loading ? '作成中...' : '作成'}
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* JSONインポートモーダル */}
-      {showJsonImportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-            {/* ヘッダー */}
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-6 rounded-t-2xl">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-xl font-bold">JSONプレイリストインポート</h2>
-                  <p className="text-white/80 text-sm mt-1">
-                    他のユーザーからエクスポートされたJSONファイルをインポート
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowJsonImportModal(false)
-                    setImportJsonData('')
-                    setImportJsonResults(null)
-                  }}
-                  className="text-white/80 hover:text-white transition-colors"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6">
-              {!importJsonResults ? (
-                /* ファイル選択画面 */
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                      JSONファイルを選択してください
-                    </h3>
-                    
-                    <div className="space-y-4">
-                      <div className="border-2 border-dashed border-purple-300 rounded-lg p-8 text-center">
-                        <Upload className="mx-auto text-purple-400 mb-4" size={48} />
-                        <input
-                          type="file"
-                          accept=".json,application/json"
-                          onChange={handleJsonFileUpload}
-                          className="hidden"
-                          id="jsonFileInput"
-                        />
-                        <label
-                          htmlFor="jsonFileInput"
-                          className="cursor-pointer bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-lg transition-colors inline-flex items-center space-x-2"
-                        >
-                          <Upload size={20} />
-                          <span>JSONファイルを選択</span>
-                        </label>
-                        <p className="text-gray-500 text-sm mt-2">
-                          または、JSONテキストを直接入力することもできます
-                        </p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          JSONテキスト直接入力
-                        </label>
-                        <textarea
-                          value={importJsonData}
-                          onChange={(e) => setImportJsonData(e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                          rows="8"
-                          placeholder="JSONデータを貼り付けてください..."
-                        />
-                        {importJsonData && (
-                          <button
-                            onClick={() => importFromJson(importJsonData)}
-                            className="mt-2 bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg transition-colors"
-                          >
-                            JSONを解析
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-                      <h4 className="text-sm font-medium text-blue-800 mb-2">📋 JSONインポートについて</h4>
-                      <ul className="text-sm text-blue-700 space-y-1">
-                        <li>• プリキュアプロフィールメーカーでエクスポートされたJSONファイルのみ対応</li>
-                        <li>• プリキュア関連楽曲のみが自動でフィルタリングされます</li>
-                        <li>• 楽曲の詳細情報とSpotifyリンクが保持されます</li>
-                        <li>• インポート後は独立したプレイリストとして管理されます</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                /* インポート結果画面 */
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                      インポート結果
-                    </h3>
-                    
-                    {/* プレイリスト情報 */}
-                    <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                      <div className="flex items-start space-x-4">
-                        <div className="w-20 h-20 bg-gradient-to-br from-purple-400 via-pink-400 to-blue-400 rounded-lg flex items-center justify-center">
-                          <Music size={32} className="text-white" />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-bold text-gray-800">{importJsonResults.playlist.name}</h4>
-                          <p className="text-sm text-gray-600 mt-1">
-                            作成者: {importJsonResults.metadata?.exportedBy || '不明'}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            エクスポート日時: {importJsonResults.metadata?.exportedAt ? 
-                              new Date(importJsonResults.metadata.exportedAt).toLocaleString('ja-JP') : '不明'}
-                          </p>
-                          {importJsonResults.playlist.description && (
-                            <p className="text-sm text-gray-600 mt-1 line-clamp-2">
-                              {importJsonResults.playlist.description}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 統計情報 */}
-                    <div className="grid grid-cols-3 gap-4 mb-6">
-                      <div className="bg-blue-50 rounded-lg p-4 text-center">
-                        <div className="text-2xl font-bold text-blue-600">{importJsonResults.originalCount}</div>
-                        <div className="text-sm text-gray-600">元の楽曲数</div>
-                      </div>
-                      <div className="bg-green-50 rounded-lg p-4 text-center">
-                        <div className="text-2xl font-bold text-green-600">{importJsonResults.filteredCount}</div>
-                        <div className="text-sm text-gray-600">プリキュア楽曲</div>
-                      </div>
-                      <div className="bg-purple-50 rounded-lg p-4 text-center">
-                        <div className="text-2xl font-bold text-purple-600">
-                          {importJsonResults.originalCount > 0 ? 
-                            Math.round((importJsonResults.filteredCount / importJsonResults.originalCount) * 100) : 0}%
-                        </div>
-                        <div className="text-sm text-gray-600">一致率</div>
-                      </div>
-                    </div>
-
-                    {importJsonResults.filteredCount > 0 ? (
-                      <div>
-                        <h4 className="font-medium text-gray-800 mb-3">インポート対象楽曲 ({importJsonResults.filteredCount}曲)</h4>
-                        <div className="max-h-60 overflow-y-auto space-y-2 mb-6">
-                          {importJsonResults.tracks.slice(0, 10).map((track, index) => (
-                            <div key={track.id} className="flex items-center space-x-3 p-2 bg-white rounded border">
-                              {track.album?.images?.[0] && (
-                                <img
-                                  src={track.album.images[0].url}
-                                  alt={track.album.name}
-                                  className="w-10 h-10 rounded object-cover"
-                                />
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">{track.name}</p>
-                                <p className="text-xs text-gray-600 truncate">
-                                  {track.artists?.map(a => a.name).join(', ')}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                          {importJsonResults.tracks.length > 10 && (
-                            <div className="text-center text-sm text-gray-500 py-2">
-                              他 {importJsonResults.tracks.length - 10} 曲...
-                            </div>
-                          )}
-                        </div>
-
-                        {/* アクション選択 */}
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              プレイリスト名
-                            </label>
-                            <input
-                              type="text"
-                              placeholder={`${importJsonResults.playlist.name} (インポート)`}
-                              className="w-full px-3 py-2 border border-gray-300 rounded mb-3 text-sm"
-                              id="jsonImportPlaylistName"
-                            />
-                            <button
-                              onClick={() => {
-                                const nameInput = document.getElementById('jsonImportPlaylistName')
-                                const playlistName = nameInput.value.trim() || `${importJsonResults.playlist.name} (インポート)`
-                                createPlaylistFromJson(importJsonResults, playlistName)
-                              }}
-                              disabled={loading}
-                              className="w-full bg-purple-500 hover:bg-purple-600 text-white py-2 rounded transition-colors disabled:opacity-50"
-                            >
-                              {loading ? 'インポート中...' : 'プレイリストをインポート'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      /* 楽曲が見つからなかった場合 */
-                      <div className="text-center py-8">
-                        <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <Music size={32} className="text-gray-400" />
-                        </div>
-                        <h4 className="text-lg font-medium text-gray-600 mb-2">
-                          プリキュア関連楽曲が見つかりませんでした
-                        </h4>
-                        <p className="text-gray-500 text-sm mb-4">
-                          このプレイリストにはプリキュア関連の楽曲が含まれていません
-                        </p>
-                        <button
-                          onClick={() => {
-                            setImportJsonResults(null)
-                            setImportJsonData('')
-                          }}
-                          className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition-colors"
-                        >
-                          別のファイルを選択
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -1729,12 +1253,66 @@ export default function LocalPlaylist({ session, profile }) {
         </div>
       )}
 
+      {/* 統合インポートモーダル */}
+      <UnifiedImportModal
+        isOpen={showUnifiedImportModal}
+        onClose={() => setShowUnifiedImportModal(false)}
+        onCreatePlaylist={createPlaylistFromUnifiedImport}
+        session={session}
+        profile={profile}
+      />
+
       {/* 使用方法ガイド */}
       <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-6 border border-indigo-100">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">🎵 ローカルプレイリストの使い方</h3>
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">🎵 統合インポート機能</h3>
+        <div className="grid md:grid-cols-2 gap-6">
+          <div>
+            <h4 className="font-medium text-green-600 mb-3">🎵 Spotify URLインポート</h4>
+            <ul className="text-sm text-gray-700 space-y-1">
+              <li>• Spotify認証不要でプレイリスト取り込み</li>
+              <li>• 共有URLを貼り付けるだけで簡単インポート</li>
+              <li>• プリキュア楽曲のみ自動フィルタリング</li>
+              <li>• 楽曲情報とアートワークを完全取得</li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-medium text-purple-600 mb-3">📄 JSONインポート</h4>
+            <ul className="text-sm text-gray-700 space-y-1">
+              <li>• 複数形式のJSONファイルに対応</li>
+              <li>• プリキュアプロフィールメーカー形式</li>
+              <li>• Spotify API形式</li>
+              <li>• 汎用JSON楽曲リスト形式</li>
+            </ul>
+          </div>
+        </div>
+        
+        <div className="mt-4 p-4 bg-white rounded-lg border border-indigo-200">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-purple-500 rounded-full flex items-center justify-center">
+              <Upload size={20} className="text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-800">ワンクリック統合インポート</p>
+              <p className="text-xs text-gray-600">
+                SpotifyプレイリストもJSONファイルも同じ画面で簡単インポート
+              </p>
+            </div>
+            <button
+              onClick={() => setShowUnifiedImportModal(true)}
+              className="bg-gradient-to-r from-green-500 to-purple-500 hover:from-green-600 hover:to-purple-600 text-white px-4 py-2 rounded-lg transition-colors text-sm"
+            >
+              インポート開始
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* プリキュア楽曲管理ガイド */}
+      <div className="bg-gradient-to-r from-pink-50 to-blue-50 rounded-2xl p-6 border border-pink-100">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">🎶 プリキュア楽曲管理機能</h3>
         <div className="grid md:grid-cols-4 gap-4 text-sm text-gray-700">
           <div>
-            <h4 className="font-medium text-indigo-600 mb-2">✨ 楽曲管理</h4>
+            <h4 className="font-medium text-pink-600 mb-2">✨ 楽曲管理</h4>
             <ul className="space-y-1">
               <li>• Spotify連携不要で楽曲検索・追加</li>
               <li>• プレビュー再生で楽曲確認</li>
@@ -1743,7 +1321,7 @@ export default function LocalPlaylist({ session, profile }) {
             </ul>
           </div>
           <div>
-            <h4 className="font-medium text-purple-600 mb-2">🎶 プレイリスト機能</h4>
+            <h4 className="font-medium text-blue-600 mb-2">🎶 プレイリスト機能</h4>
             <ul className="space-y-1">
               <li>• 個人用ローカルプレイリスト作成・管理</li>
               <li>• 楽曲の追加・削除をリアルタイム反映</li>
@@ -1761,7 +1339,7 @@ export default function LocalPlaylist({ session, profile }) {
             </ul>
           </div>
           <div>
-            <h4 className="font-medium text-pink-600 mb-2">📤 JSONエクスポート</h4>
+            <h4 className="font-medium text-purple-600 mb-2">📤 JSONエクスポート</h4>
             <ul className="space-y-1">
               <li>• ワンクリックJSONファイルダウンロード</li>
               <li>• 他ユーザーとの簡単共有</li>
@@ -1771,9 +1349,9 @@ export default function LocalPlaylist({ session, profile }) {
           </div>
         </div>
         
-        <div className="mt-4 p-4 bg-white rounded-lg border border-indigo-200">
+        <div className="mt-4 p-4 bg-white rounded-lg border border-pink-200">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-pink-500 rounded-full flex items-center justify-center">
               <Music size={20} className="text-white" />
             </div>
             <div className="flex-1">
@@ -1786,47 +1364,47 @@ export default function LocalPlaylist({ session, profile }) {
         </div>
       </div>
 
-      {/* JSONエクスポート・インポート機能ガイド */}
-      <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-6 border border-purple-100">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">📤 JSONエクスポート・インポート機能</h3>
+      {/* 統合機能の特徴 */}
+      <div className="bg-gradient-to-r from-green-50 via-blue-50 to-purple-50 rounded-2xl p-6 border border-green-100">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">🚀 統合インポートの特徴</h3>
         <div className="grid md:grid-cols-2 gap-6">
           <div>
-            <h4 className="font-medium text-purple-600 mb-3">📥 エクスポート方法</h4>
-            <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside">
-              <li>プレイリストの「JSONエクスポート」ボタンをクリック</li>
-              <li>自動的にJSONファイルがダウンロードされます</li>
-              <li>ファイルを他のユーザーと共有</li>
-              <li>Spotify連携なしでプレイリスト共有が可能</li>
-            </ol>
+            <h4 className="font-medium text-green-600 mb-3">🎯 ワンストップ機能</h4>
+            <ul className="text-sm text-gray-700 space-y-1">
+              <li>• 1つのボタンで全てのインポート機能にアクセス</li>
+              <li>• タブ切り替えで直感的な操作</li>
+              <li>• Spotify URLとJSONファイルの両方に対応</li>
+              <li>• 統一されたUI/UXで迷わない</li>
+            </ul>
           </div>
           <div>
-            <h4 className="font-medium text-pink-600 mb-3">📤 インポート方法</h4>
-            <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside">
-              <li>「JSONインポート」ボタンをクリック</li>
-              <li>JSONファイルを選択またはテキスト貼り付け</li>
-              <li>プリキュア楽曲が自動でフィルタリング</li>
-              <li>新しいプレイリストとして作成</li>
-            </ol>
+            <h4 className="font-medium text-blue-600 mb-3">🔍 スマートフィルタリング</h4>
+            <ul className="text-sm text-gray-700 space-y-1">
+              <li>• プリキュア関連楽曲の自動識別</li>
+              <li>• インポート前のプレビュー表示</li>
+              <li>• 元楽曲数と抽出楽曲数の比較</li>
+              <li>• 一致率の可視化で品質確認</li>
+            </ul>
           </div>
         </div>
         
         <div className="mt-4 grid md:grid-cols-2 gap-4">
-          <div className="bg-white rounded-lg p-4 border border-purple-200">
-            <h5 className="font-medium text-gray-800 mb-2">✅ エクスポートの利点</h5>
+          <div className="bg-white rounded-lg p-4 border border-green-200">
+            <h5 className="font-medium text-gray-800 mb-2">✅ 使いやすさ</h5>
             <div className="text-xs text-gray-600 space-y-1">
-              <div>• Spotify認証不要でプレイリスト共有</div>
-              <div>• 楽曲情報とSpotifyリンクを完全保持</div>
-              <div>• ファイルサイズが小さく送信簡単</div>
-              <div>• プリキュア楽曲のみ確実に共有</div>
+              <div>• 分散していた機能を1つに統合</div>
+              <div>• エラーハンドリングの強化</div>
+              <div>• 段階的なインポートフロー</div>
+              <div>• リアルタイムフィードバック</div>
             </div>
           </div>
-          <div className="bg-white rounded-lg p-4 border border-pink-200">
-            <h5 className="font-medium text-gray-800 mb-2">📋 データ形式</h5>
+          <div className="bg-white rounded-lg p-4 border border-blue-200">
+            <h5 className="font-medium text-gray-800 mb-2">🔒 データ保護</h5>
             <div className="text-xs text-gray-600 space-y-1">
-              <div>• JSON形式で楽曲データを保存</div>
-              <div>• メタデータ（作成者・日時）も記録</div>
-              <div>• プリキュア関連楽曲の自動判定</div>
-              <div>• 重複楽曲の自動除去</div>
+              <div>• プリキュア楽曲のみ抽出で安全</div>
+              <div>• 楽曲情報の完全保持</div>
+              <div>• プライバシーに配慮した設計</div>
+              <div>• ローカルストレージで安心管理</div>
             </div>
           </div>
         </div>
