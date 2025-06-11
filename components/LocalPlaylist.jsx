@@ -442,13 +442,13 @@ export default function LocalPlaylist({ session, profile }) {
       {/* プレイリスト作成モーダル */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-            <div className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white p-6 rounded-t-2xl">
-              <h3 className="text-xl font-bold">新しいプレイリスト</h3>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col">
+            <div className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white p-4 rounded-t-2xl flex-shrink-0">
+              <h3 className="text-lg font-bold">新しいプレイリスト</h3>
               <p className="text-white/80 text-sm mt-1">プリキュア楽曲のプレイリストを作成</p>
             </div>
             
-            <div className="p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   プレイリスト名 *
@@ -457,7 +457,7 @@ export default function LocalPlaylist({ session, profile }) {
                   type="text"
                   value={newPlaylist.name}
                   onChange={(e) => setNewPlaylist(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
                   placeholder="例: お気に入りのプリキュア楽曲"
                   maxLength="100"
                 />
@@ -470,19 +470,19 @@ export default function LocalPlaylist({ session, profile }) {
                 <textarea
                   value={newPlaylist.description}
                   onChange={(e) => setNewPlaylist(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
                   placeholder="プレイリストの説明（任意）"
-                  rows="3"
+                  rows="2"
                   maxLength="500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   公開設定
                 </label>
-                <div className="space-y-3">
-                  <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                <div className="space-y-2">
+                  <label className="flex items-center space-x-2 cursor-pointer p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
                     <input
                       type="radio"
                       name="privacy"
@@ -490,14 +490,14 @@ export default function LocalPlaylist({ session, profile }) {
                       onChange={() => setNewPlaylist(prev => ({ ...prev, isPublic: false }))}
                       className="text-indigo-600 focus:ring-indigo-500"
                     />
-                    <Lock size={16} className="text-gray-500" />
+                    <Lock size={14} className="text-gray-500" />
                     <div>
-                      <div className="font-medium text-gray-800">非公開</div>
+                      <div className="text-sm font-medium text-gray-800">非公開</div>
                       <div className="text-xs text-gray-600">自分だけが閲覧可能</div>
                     </div>
                   </label>
                   
-                  <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                  <label className="flex items-center space-x-2 cursor-pointer p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
                     <input
                       type="radio"
                       name="privacy"
@@ -505,9 +505,9 @@ export default function LocalPlaylist({ session, profile }) {
                       onChange={() => setNewPlaylist(prev => ({ ...prev, isPublic: true }))}
                       className="text-indigo-600 focus:ring-indigo-500"
                     />
-                    <Globe size={16} className="text-gray-500" />
+                    <Globe size={14} className="text-gray-500" />
                     <div>
-                      <div className="font-medium text-gray-800">公開</div>
+                      <div className="text-sm font-medium text-gray-800">公開</div>
                       <div className="text-xs text-gray-600">他のユーザーも閲覧可能</div>
                     </div>
                   </label>
@@ -515,20 +515,20 @@ export default function LocalPlaylist({ session, profile }) {
               </div>
             </div>
             
-            <div className="p-6 border-t border-gray-200 flex space-x-3">
+            <div className="p-4 border-t border-gray-200 flex space-x-3 flex-shrink-0">
               <button
                 onClick={() => {
                   setShowCreateModal(false)
                   setNewPlaylist({ name: '', description: '', isPublic: false })
                 }}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
               >
                 キャンセル
               </button>
               <button
                 onClick={createPlaylist}
                 disabled={!newPlaylist.name.trim() || loading}
-                className="flex-1 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               >
                 {loading ? '作成中...' : '作成'}
               </button>
@@ -540,13 +540,13 @@ export default function LocalPlaylist({ session, profile }) {
       {/* プレイリスト編集モーダル */}
       {showEditModal && editingPlaylist && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-            <div className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white p-6 rounded-t-2xl">
-              <h3 className="text-xl font-bold">プレイリスト編集</h3>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col">
+            <div className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white p-4 rounded-t-2xl flex-shrink-0">
+              <h3 className="text-lg font-bold">プレイリスト編集</h3>
               <p className="text-white/80 text-sm mt-1">プレイリスト情報を編集</p>
             </div>
             
-            <div className="p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   プレイリスト名 *
@@ -555,7 +555,7 @@ export default function LocalPlaylist({ session, profile }) {
                   type="text"
                   value={editingPlaylist.name}
                   onChange={(e) => setEditingPlaylist(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
                   placeholder="プレイリスト名"
                   maxLength="100"
                 />
@@ -568,19 +568,19 @@ export default function LocalPlaylist({ session, profile }) {
                 <textarea
                   value={editingPlaylist.description}
                   onChange={(e) => setEditingPlaylist(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
                   placeholder="プレイリストの説明（任意）"
-                  rows="3"
+                  rows="2"
                   maxLength="500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   公開設定
                 </label>
-                <div className="space-y-3">
-                  <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                <div className="space-y-2">
+                  <label className="flex items-center space-x-2 cursor-pointer p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
                     <input
                       type="radio"
                       name="privacy"
@@ -588,14 +588,14 @@ export default function LocalPlaylist({ session, profile }) {
                       onChange={() => setEditingPlaylist(prev => ({ ...prev, is_public: false }))}
                       className="text-indigo-600 focus:ring-indigo-500"
                     />
-                    <Lock size={16} className="text-gray-500" />
+                    <Lock size={14} className="text-gray-500" />
                     <div>
-                      <div className="font-medium text-gray-800">非公開</div>
+                      <div className="text-sm font-medium text-gray-800">非公開</div>
                       <div className="text-xs text-gray-600">自分だけが閲覧可能</div>
                     </div>
                   </label>
                   
-                  <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                  <label className="flex items-center space-x-2 cursor-pointer p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
                     <input
                       type="radio"
                       name="privacy"
@@ -603,9 +603,9 @@ export default function LocalPlaylist({ session, profile }) {
                       onChange={() => setEditingPlaylist(prev => ({ ...prev, is_public: true }))}
                       className="text-indigo-600 focus:ring-indigo-500"
                     />
-                    <Globe size={16} className="text-gray-500" />
+                    <Globe size={14} className="text-gray-500" />
                     <div>
-                      <div className="font-medium text-gray-800">公開</div>
+                      <div className="text-sm font-medium text-gray-800">公開</div>
                       <div className="text-xs text-gray-600">他のユーザーも閲覧可能</div>
                     </div>
                   </label>
@@ -613,20 +613,20 @@ export default function LocalPlaylist({ session, profile }) {
               </div>
             </div>
             
-            <div className="p-6 border-t border-gray-200 flex space-x-3">
+            <div className="p-4 border-t border-gray-200 flex space-x-3 flex-shrink-0">
               <button
                 onClick={() => {
                   setShowEditModal(false)
                   setEditingPlaylist(null)
                 }}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
               >
                 キャンセル
               </button>
               <button
                 onClick={updatePlaylist}
                 disabled={!editingPlaylist.name.trim() || loading}
-                className="flex-1 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               >
                 {loading ? '更新中...' : '更新'}
               </button>

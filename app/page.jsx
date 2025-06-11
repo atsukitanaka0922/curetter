@@ -1,16 +1,16 @@
-// app/page.jsx - EnhancedAuth対応版（完全なパスワードログイン対応）
+// app/page.jsx - プレビューページリダイレクト対応版
 'use client'
 
 import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
-import { Heart, Star, Sparkles, User, LogOut, Camera, Image as ImageIcon, CreditCard, Eye, Music } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Heart, Star, Sparkles, User, LogOut, Camera, Image as ImageIcon, CreditCard, Eye, Music, ExternalLink } from 'lucide-react'
 import Profile from '../components/Profile'
 import ImageGallery from '../components/ImageGallery'
 import ImageManager from '../components/ImageManager'
 import DigitalCard from '../components/DigitalCard'
-import UserPreview from '../components/UserPreview'
 import LocalPlaylist from '../components/LocalPlaylist'
-import EnhancedAuth from '../components/EnhancedAuth' // 完全版認証コンポーネント
+import EnhancedAuth from '../components/EnhancedAuth'
 
 // Supabaseクライアントの初期化
 const supabase = createBrowserClient(
@@ -43,10 +43,10 @@ function LoadingSpinner() {
 
 // メインダッシュボード
 function Dashboard({ session }) {
-  const [currentView, setCurrentView] = useState('profile') // 'profile', 'gallery', 'manage', 'card', 'playlist'
+  const router = useRouter()
+  const [currentView, setCurrentView] = useState('profile')
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
-  const [showPreview, setShowPreview] = useState(false)
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -77,10 +77,11 @@ function Dashboard({ session }) {
         // 配列データの処理
         const processedData = {
           ...data,
-          favorite_character: Array.isArray(data.favorite_character) ? data.favorite_character : 
-                             data.favorite_character ? data.favorite_character.split(',').map(s => s.trim()) : [],
+          favorite_character: Array.isArray(data.favorite_character) ? 
+            data.favorite_character : 
+            data.favorite_character ? data.favorite_character.split(',').map(s => s.trim()) : [],
           favorite_series: Array.isArray(data.favorite_series) ? data.favorite_series : 
-                          data.favorite_series ? data.favorite_series.split(',').map(s => s.trim()) : [],
+                         data.favorite_series ? data.favorite_series.split(',').map(s => s.trim()) : [],
           favorite_movie: Array.isArray(data.favorite_movie) ? data.favorite_movie : 
                          data.favorite_movie ? data.favorite_movie.split(',').map(s => s.trim()) : [],
           favorite_episode: Array.isArray(data.favorite_episode) ? data.favorite_episode : 
@@ -95,7 +96,6 @@ function Dashboard({ session }) {
       }
     } catch (error) {
       console.error('❌ Profile loading error:', error)
-      // エラーが発生してもアプリは続行
     } finally {
       setProfileLoading(false)
     }
@@ -120,7 +120,6 @@ function Dashboard({ session }) {
       // 状態をクリア
       setProfile(null)
       setCurrentView('profile')
-      setShowPreview(false)
       
     } catch (error) {
       console.error('❌ Signout failed:', error)
@@ -136,6 +135,11 @@ function Dashboard({ session }) {
   const handleProfileUpdate = (updatedProfile) => {
     console.log('👤 Profile updated:', updatedProfile.display_name)
     setProfile(updatedProfile)
+  }
+
+  // プレビューページに移動
+  const handlePreview = () => {
+    router.push(`/preview/${session.user.id}`)
   }
 
   // プロフィール読み込み中の表示
@@ -163,28 +167,25 @@ function Dashboard({ session }) {
                   <img
                     src={profile.avatar_url}
                     alt="プロフィール画像"
-                    className="w-10 h-10 rounded-full object-cover border-2 border-pink-300 shadow-sm"
-                    onError={(e) => {
-                      console.log('Avatar load error, falling back to default')
-                      e.target.style.display = 'none'
-                      e.target.nextElementSibling.style.display = 'flex'
-                    }}
+                    className="w-10 h-10 rounded-full object-cover border-2 border-pink-300"
                   />
-                ) : null}
-                <div className={`w-10 h-10 bg-gradient-to-br from-pink-300 via-purple-300 to-blue-300 rounded-full flex items-center justify-center ${profile?.avatar_url ? 'hidden' : 'flex'}`}>
-                  <User size={20} className="text-white" />
-                </div>
+                ) : (
+                  <div className="w-10 h-10 bg-gradient-to-br from-pink-300 to-purple-300 rounded-full flex items-center justify-center">
+                    <User size={20} className="text-white" />
+                  </div>
+                )}
                 <div>
-                  <h1 className="text-lg font-bold text-gray-800">
+                  <h1 className="font-bold text-gray-800">
                     {profile?.display_name || 'プリキュアファン'}
                   </h1>
+                  <p className="text-xs text-gray-600">
+                    {session.user.email}
+                  </p>
                 </div>
               </div>
-            </div>
 
-            {/* ナビゲーション */}
-            <div className="flex items-center space-x-2">
-              <nav className="flex space-x-1">
+              {/* ナビゲーション */}
+              <nav className="flex items-center space-x-1">
                 <button
                   onClick={() => setCurrentView('profile')}
                   className={`px-3 py-1.5 rounded-lg transition-colors flex items-center space-x-1.5 text-xs font-medium ${
@@ -245,11 +246,11 @@ function Dashboard({ session }) {
               {/* アクションボタン */}
               <div className="flex items-center space-x-2 ml-2 pl-2 border-l border-gray-200">
                 <button
-                  onClick={() => setShowPreview(true)}
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1.5 rounded-lg transition-colors flex items-center space-x-1.5 text-xs font-medium shadow-sm"
+                  onClick={handlePreview}
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg transition-colors flex items-center space-x-1.5 text-xs font-medium shadow-sm"
                   title="他ユーザーから見たプレビュー"
                 >
-                  <Eye size={14} />
+                  <ExternalLink size={14} />
                   <span>プレビュー</span>
                 </button>
 
@@ -303,14 +304,6 @@ function Dashboard({ session }) {
           />
         )}
       </div>
-
-      {/* プレビューモーダル */}
-      {showPreview && (
-        <UserPreview 
-          userId={session.user.id}
-          onClose={() => setShowPreview(false)}
-        />
-      )}
     </div>
   )
 }
