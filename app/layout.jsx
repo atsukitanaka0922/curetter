@@ -12,7 +12,7 @@ export default function RootLayout({ children }) {
         <meta name="description" content="プリキュアファンのためのプロフィール共有プラットフォーム" />
         <link rel="icon" href="/favicon.ico" />
       </head>
-      <body className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
+      <body className="bg-gray-100 text-gray-900" >
         <SessionProvider>
           {children}
         </SessionProvider>
