@@ -1,4 +1,4 @@
-// components/BackgroundSettings.jsx - プロフィール背景設定コンポーネント
+// components/BackgroundSettings.jsx - プロフィール背景設定コンポーネント（修正版）
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -188,7 +188,7 @@ export default function BackgroundSettings({ session, currentBackground, onBackg
     }
   }
 
-  // 背景設定保存
+  // 背景設定保存（修正版）
   const saveBackgroundSettings = async () => {
     if (!session?.user?.id) return
 
@@ -204,20 +204,88 @@ export default function BackgroundSettings({ session, currentBackground, onBackg
         updated_at: new Date().toISOString()
       }
 
+      console.log('🎨 背景設定保存開始:', backgroundData)
+
       const { data, error } = await supabase
         .from('user_backgrounds')
         .upsert(backgroundData, { onConflict: 'user_id' })
 
       if (error) throw error
 
+      // 親コンポーネントへの更新通知
       onBackgroundUpdate(backgroundData)
+
+      // 即座にページ全体の背景を適用（修正ポイント）
+      applyBackgroundToPage(backgroundData)
+
       setIsOpen(false)
       alert('背景設定を保存しました！✨')
+      
     } catch (error) {
       console.error('背景設定保存エラー:', error)
       alert('背景設定の保存に失敗しました')
     } finally {
       setSaving(false)
+    }
+  }
+
+  // ページ全体に背景を適用する関数（新規追加）
+  const applyBackgroundToPage = (backgroundData) => {
+    if (typeof window === 'undefined') return
+
+    const body = document.body
+    const html = document.documentElement
+
+    // 既存のスタイルをクリア
+    body.style.background = ''
+    body.style.backgroundColor = ''
+    body.style.backgroundImage = ''
+    body.style.backgroundSize = ''
+    body.style.backgroundPosition = ''
+    body.style.backgroundRepeat = ''
+    body.style.backgroundAttachment = ''
+    html.style.background = ''
+    html.style.backgroundColor = ''
+
+    console.log('🎨 背景適用:', backgroundData.type, backgroundData)
+
+    switch (backgroundData.type) {
+      case 'solid':
+        const color = backgroundData.solid_color || '#ff69b4'
+        body.style.backgroundColor = color
+        html.style.backgroundColor = color
+        console.log('✅ 単色背景適用:', color)
+        break
+
+      case 'gradient':
+        const gradient = gradientPresets.find(g => g.id === backgroundData.gradient_id)?.gradient 
+          || gradientPresets[0].gradient
+        body.style.background = gradient
+        html.style.background = gradient
+        console.log('✅ グラデーション背景適用:', backgroundData.gradient_id)
+        break
+
+      case 'image':
+        if (backgroundData.image_url) {
+          const settings = backgroundData.image_settings || {}
+          body.style.backgroundImage = `url(${backgroundData.image_url})`
+          body.style.backgroundSize = `${(settings.scale || 1) * 100}%`
+          body.style.backgroundPosition = `${settings.positionX || 50}% ${settings.positionY || 50}%`
+          body.style.backgroundRepeat = 'no-repeat'
+          body.style.backgroundAttachment = 'fixed'
+          html.style.backgroundImage = `url(${backgroundData.image_url})`
+          html.style.backgroundSize = `${(settings.scale || 1) * 100}%`
+          html.style.backgroundPosition = `${settings.positionX || 50}% ${settings.positionY || 50}%`
+          html.style.backgroundRepeat = 'no-repeat'
+          html.style.backgroundAttachment = 'fixed'
+          console.log('✅ 画像背景適用:', backgroundData.image_url)
+        }
+        break
+
+      default:
+        body.style.background = gradientPresets[0].gradient
+        html.style.background = gradientPresets[0].gradient
+        break
     }
   }
 
@@ -238,7 +306,7 @@ export default function BackgroundSettings({ session, currentBackground, onBackg
     })
   }
 
-  // プレビューしながら設定を取得
+  // プレビューしながら設定を取得（修正版）
   const getPreviewStyle = () => {
     switch (backgroundType) {
       case 'gradient':
@@ -384,16 +452,15 @@ export default function BackgroundSettings({ session, currentBackground, onBackg
                         <label className="block w-full cursor-pointer">
                           <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-purple-400 transition-colors">
                             {uploading ? (
-                              <div className="flex flex-col items-center space-y-2">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+                              <div className="flex items-center justify-center space-x-2">
+                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500"></div>
                                 <span className="text-sm text-gray-600">アップロード中...</span>
                               </div>
                             ) : (
                               <div className="flex flex-col items-center space-y-2">
                                 <Upload size={24} className="text-gray-400" />
-                                <span className="text-sm text-gray-600">
-                                  クリックして画像を選択 (最大5MB)
-                                </span>
+                                <span className="text-sm text-gray-600">クリックして画像を選択</span>
+                                <span className="text-xs text-gray-400">PNG, JPG (最大5MB)</span>
                               </div>
                             )}
                           </div>
@@ -410,20 +477,17 @@ export default function BackgroundSettings({ session, currentBackground, onBackg
                       {/* 画像調整 */}
                       {backgroundImage && (
                         <div className="space-y-4">
-                          <h4 className="font-semibold text-gray-800 flex items-center space-x-2">
-                            <Sliders size={16} />
-                            <span>画像調整</span>
-                          </h4>
+                          <h4 className="font-medium text-gray-800">画像調整</h4>
                           
                           {/* スケール */}
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              スケール: {Math.round(imageSettings.scale * 100)}%
+                              サイズ: {Math.round(imageSettings.scale * 100)}%
                             </label>
                             <input
                               type="range"
                               min="0.5"
-                              max="3"
+                              max="2"
                               step="0.1"
                               value={imageSettings.scale}
                               onChange={(e) => setImageSettings(prev => ({ ...prev, scale: parseFloat(e.target.value) }))}
@@ -477,7 +541,7 @@ export default function BackgroundSettings({ session, currentBackground, onBackg
                             />
                           </div>
 
-                          {/* フィルター効果 */}
+                          {/* エフェクト */}
                           <div className="grid grid-cols-3 gap-3">
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">

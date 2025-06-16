@@ -8,7 +8,7 @@ import SocialLinkManager from './SocialLinkManager'
 import BackgroundSettings from './BackgroundSettings'
 import { getRandomTransformationPhrase } from '../utils/precureLoadingMessages'
 
-export default function Profile({ session, profile, onProfileUpdate, onAvatarChange }) {
+export default function Profile({ session, profile, onProfileUpdate, onAvatarChange, userBackground, onBackgroundUpdate }) {
   // === State管理 ===
   const [editing, setEditing] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -18,7 +18,6 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
   const [moviesData, setMoviesData] = useState([])
   const [episodeTypesData, setEpisodeTypesData] = useState([])
   const [fairiesData, setFairiesData] = useState([]) // 妖精データ追加
-  const [userBackground, setUserBackground] = useState(null)
 
   // フォームデータ
   const [formData, setFormData] = useState({
@@ -546,7 +545,7 @@ export default function Profile({ session, profile, onProfileUpdate, onAvatarCha
 
   // ユーザー背景更新ハンドラーを追加
   const handleBackgroundUpdate = (newBackground) => {
-    setUserBackground(newBackground)
+    if (onBackgroundUpdate) onBackgroundUpdate(newBackground)
   }
 
   // === カテゴリ整理関数 ===

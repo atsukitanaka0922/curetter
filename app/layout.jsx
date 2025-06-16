@@ -8,8 +8,8 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ja">
       <head>
-        <title>プリキュアファンプロフィール</title>
-        <meta name="description" content="プリキュアファンのためのプロフィール共有プラットフォーム" />
+        <title>キュアサークル</title>
+        <meta name="description" content="キュアサークル" />
         <link rel="icon" href="/favicon.ico" />
       </head>
       <body className="bg-gray-100 text-gray-900" >
