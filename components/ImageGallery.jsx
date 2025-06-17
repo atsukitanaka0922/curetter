@@ -86,16 +86,23 @@ export default function ImageGallery({ session, profile }) {
       const imagesWithPosts = files
         ?.filter(file => file.name && !file.name.includes('.emptyFolderPlaceholder'))
         .map(file => {
-          const { data: { publicUrl } } = supabase.storage
-            .from('user-images')
-            .getPublicUrl(`${session.user.id}/${file.name}`)
-
           const matchingPost = postsData?.find(post => post.image_path === file.name)
+
+          // image_url優先、なければStorageのpublicUrlを生成
+          let url = ''
+          if (matchingPost?.image_url) {
+            url = matchingPost.image_url
+          } else {
+            const { data: { publicUrl } } = supabase.storage
+              .from('user-images')
+              .getPublicUrl(`${session.user.id}/${file.name}`)
+            url = publicUrl
+          }
 
           return {
             id: file.name,
             name: file.name,
-            url: publicUrl,
+            url,
             size: file.metadata?.size || 0,
             created_at: file.created_at,
             // 投稿データをマージ
@@ -107,7 +114,7 @@ export default function ImageGallery({ session, profile }) {
             event_date: matchingPost?.event_date,
             event_venue: matchingPost?.event_venue,
             event_name: matchingPost?.event_name,
-            no_third_party_in_photo: matchingPost?.no_third_party_in_photo || false
+            no_third_party_in_photo: Boolean(matchingPost?.no_third_party_in_photo) // ←型を明示
           }
         }) || []
 
